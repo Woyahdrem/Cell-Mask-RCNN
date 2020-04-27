@@ -27,7 +27,7 @@ import skimage.draw
 from imgaug import augmenters as iaa
 
 # Root directory of the project
-ROOT_DIR = "" #TODO
+ROOT_DIR = os.path.abspath("../../")
 assert len(ROOT_DIR) != 0, "Please specify the root directory (variable ROOT_DIR)"
 
 # Import Mask RCNN
@@ -101,7 +101,7 @@ class CellConfig(Config):
 
 class CellDataset(utils.Dataset):
     
-    def load_cell(self, dataset_dir, subset, mode):
+    def load_cell(self, dataset_dir, subset):
         """Load a subset of the Cell dataset.
         dataset_dir: Root directory of the dataset.
         subset: Subset to load: train or val
@@ -153,7 +153,7 @@ class CellDataset(utils.Dataset):
             # if the dataset becomes too big, having the values directly in the json becomes necessary
             image_path = os.path.join(dataset_dir, a['filename'])
             img = skimage.io.imread(image_path)
-            height, width = img.shame[:2]
+            height, width = img.shape[:2]
             
             self.add_image(
                 "cell",
@@ -234,7 +234,7 @@ def train(model):
     # Finally, train the model
     print("Training network heads")
     model.train(dataset_train, dataset_val,
-                learing_rate=config.LEARNING_RATE,
+                learning_rate=config.LEARNING_RATE,
                 epochs=100,
                 layers='heads',
                 augmentation=augmentation)
