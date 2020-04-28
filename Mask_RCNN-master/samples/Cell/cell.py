@@ -93,13 +93,17 @@ class CellConfig(Config):
     # These must definitely be higher
     MAX_GT_INSTANCES = 100
     DETECTION_MAX_INSTANCES = 100
+
+    # Minimum probability value to accept a detected instance
+    # ROIs below this threshold are skipped
+    DETECTION_MIN_CONFIDENCE = 0.5
     
 
 ############################################################
 #  Dataset
 ############################################################
 
-class CellDataset(utils.Dataset):
+class CellDatasetDefault(utils.Dataset):
     
     def load_cell(self, dataset_dir, subset):
         """Load a subset of the Cell dataset.
@@ -205,20 +209,140 @@ class CellDataset(utils.Dataset):
             super(self.__class__, self).image_reference(image_id)
 
 
+class CellDatasetMultipleMasks(utils.Dataset):
+
+    def load_cell(self, dataset_dir, subset):
+        """Load a subset of the Cell dataset.
+        dataset_dir: Root directory of the dataset.
+        subset: Subset to load: train or val
+        """
+        # Add classes. We have multiple classes, one for each gene
+        # What is the difference between source and class_name?
+        self.add_class("cell", 1, "red")
+        self.add_class("cell", 2, "not red")
+        self.add_class("cell", 3, "white")
+        self.add_class("cell", 4, "not white")
+
+        # Train or validation dataset?
+        assert subset in ["train", "val"]
+        dataset_dir = os.path.join(dataset_dir, subset)
+
+        # Load annotations
+        # { "filename": "2019-04-03_RNAScope PAF OCT D380.lif [PAF OCT D380 FOXJ1 CFTR 1 1] Z1.jpg",
+        #   "size": 328856,
+        #   "regions": [
+        # 	{ "shape_attributes": {
+        # 	    "name": "rect",
+        # 	    "x": 409,
+        # 	    "y": 1017,
+        # 	    "width": 58,
+        # 	    "height": 78},
+        # 	  "region_attributes": {
+        # 			"gene expression": "red"
+        #     }},
+        #     ... more regions...
+        #   },
+        #   "size": 328856
+        # }
+        annotations = json.load(open(os.path.join(dataset_dir, "via_export_json.json")))
+        annotations = list(annotations.values())  # don't need the dict keys
+
+        # Skip unannotated images
+        annotations = [a for a in annotations if a['regions']]
+
+        # Add the images
+        for a in annotations:
+            # We are using Bounding Boxes instead of Masks
+            # To use the masks we will convert the boxes in polygons and use them as masks
+            polygons = [r['shape_attributes'] for r in a['regions']]
+
+            # Since we are using multiple classes, we also need to know what class each annotation belongs to
+            classes = [r['region_attributes'] for r in a['regions']]
+
+            # Next, we need to load the image path and the image size
+            # if the dataset becomes too big, having the values directly in the json becomes necessary
+            image_path = os.path.join(dataset_dir, a['filename'])
+            img = skimage.io.imread(image_path)
+            height, width = img.shape[:2]
+
+            self.add_image(
+                "cell",
+                image_id=a["filename"],
+                path=image_path,
+                width=width, height=height,
+                polygons=polygons,
+                classes=classes)
+
+    def load_mask(self, image_id):
+        """Generate instance masks for an image.
+       Returns:
+        masks: A bool array of shape [height, width, 2 * instance count] with
+            two masks per instance (one for red and one for white).
+        class_ids: a 1D array of class IDs of the instance masks.
+        """
+        # If not a cell dataset image, delegate to parent class
+        info = self.image_info[image_id]
+        if info["source"] != "cell":
+            return super(self.__class__, self).load_mask(image_id)
+
+        # Convert the BBox to a bitmap mask of shape
+        # [height, width, instance_count]
+        # Right now we are converting the Bounding Box into a rectangular mask
+        mask = np.zeros([info["height"], info["width"], 2*len(info["polygons"])], dtype=np.uint8)
+        class_ids = np.zeros(2*len(info["polygons"]))
+
+        # Set the masks for each instance
+        # At the same time, set class_ids to the corresponding class
+        for i, (p, c) in enumerate(zip(info["polygons"], info["classes"])):
+            rr, cc = skimage.draw.rectangle(start=(p["y"], p["x"]), extent=(p["height"], p["width"]))
+            mask[rr, cc, i:i+2] = 1
+            if c["gene expression"] == "red":
+                class_ids[i] = 1
+                class_ids[i+1] = 4
+            elif c["gene expression"] == "white":
+                class_ids[i] = 2
+                class_ids[i+1] = 3
+            elif c["gene expression"] == "red and white":
+                class_ids[i] = 1
+                class_ids[i+1] = 3
+            elif c["gene expression"] == "negative":
+                class_ids[i] = 2
+                class_ids[i+1] = 4
+            else:
+                print(f"Class not recognized: {c['gene expression']} in image {image_id}")
+
+        # Return mask and class ID array
+        return mask.astype(np.bool), class_ids
+
+    def image_reference(self, image_id):
+        """Return the path of the image."""
+        info = self.image_info[image_id]
+        if info["source"] == "cell":
+            return info["path"]
+        else:
+            super(self.__class__, self).image_reference(image_id)
+
+
 ############################################################
 #  Training
 ############################################################
 
-def train(model):
+def train(model, mode):
     """Train the model."""
     
     # Training dataset
-    dataset_train = CellDataset()
+    if mode == "default":
+        dataset_train = CellDatasetDefault()
+    elif mode == "multiple_masks":
+        dataset_train = CellDatasetMultipleMasks()
     dataset_train.load_cell(args.dataset, "train")
     dataset_train.prepare()
     
     # Validation dataset
-    dataset_val = CellDataset()
+    if mode == "default":
+        dataset_val = CellDatasetDefault()
+    elif mode == "multiple_masks":
+        dataset_val = CellDatasetMultipleMasks()
     dataset_val.load_cell(args.dataset, "val")
     dataset_val.prepare()
     
@@ -266,6 +390,10 @@ if __name__ == '__main__':
     parser.add_argument('--image', required=False,
                         metavar="path or URL to image",
                         help='Image on which yo detect cells')
+    parser.add_argument('--class_mode', required=False,
+                        default="default",
+                        metavar="Handling of multiple classes (default = each combination is a class)",
+                        help="Use 'multiple_masks' to insert multiple single class masks for each annotation")
     args = parser.parse_args()
     
     # Validate arguments
@@ -273,6 +401,7 @@ if __name__ == '__main__':
         assert args.dataset, "Argument --dataset is required for training"
     elif args.command == "detect":
         assert args.image, "Provide --image or --video to apply color splash"
+    assert args.class_mode in ["default", "multiple_masks"], "'class_mode' value not recognized. Use 'default' or 'multiple_masks'"
     
     print("Weights: ", args.weights)
     print("Dataset: ", args.dataset)
@@ -326,7 +455,7 @@ if __name__ == '__main__':
     
     # Train or evaluate
     if args.command == "train":
-        train(model)
+        train(model, args.class_mode)
     elif args.command == "detect":
         # TODO
         print("Not yet implemented.")
