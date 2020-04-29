@@ -323,11 +323,19 @@ class CellDatasetMultipleMasks(utils.Dataset):
             super(self.__class__, self).image_reference(image_id)
 
 
+class CellDatasetMultipleChannels(CellDatasetDefault):
+
+    def load_image(self, image_id):
+        # Load image
+        # The image has been preprocessed in a [H,W,C] numpy array of uint8
+        image = np.load(open(self.image_info[image_id]["path"]))
+        return image
+
 ############################################################
 #  Training
 ############################################################
 
-def train(model, mode):
+def train(model, mode, channels):
     """Train the model."""
     
     # Training dataset
@@ -346,8 +354,11 @@ def train(model, mode):
     dataset_val.load_cell(args.dataset, "val")
     dataset_val.prepare()
     
-    # In the future the regex to select the correct layers is this
-    # layers = r"(conv1)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)"
+    # Select the layers to train
+    if channels == "rgb":
+        layers = "heads"
+    elif channels == "genes":
+        layers = r"(conv1)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)"
     
     # Define the augmentation of for the dataset
     augmentation = iaa.Sequential([
@@ -360,7 +371,7 @@ def train(model, mode):
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
                 epochs=100,
-                layers='heads',
+                layers=layers,
                 augmentation=augmentation)
 
 
@@ -394,6 +405,10 @@ if __name__ == '__main__':
                         default="default",
                         metavar="Handling of multiple classes (default = each combination is a class)",
                         help="Use 'multiple_masks' to insert multiple single class masks for each annotation")
+    parser.add_argument('--input_channels', required=False,
+                        default="rgb",
+                        metavar="Channels of the input images",
+                        help="Specifies the channels of the images: 'rgb' for standard channels and 'genes' for gene specific channels.")
     args = parser.parse_args()
     
     # Validate arguments
@@ -401,15 +416,21 @@ if __name__ == '__main__':
         assert args.dataset, "Argument --dataset is required for training"
     elif args.command == "detect":
         assert args.image, "Provide --image or --video to apply color splash"
-    assert args.class_mode in ["default", "multiple_masks"], "'class_mode' value not recognized. Use 'default' or 'multiple_masks'"
-    
+    assert args.class_mode in ["default", "multiple_masks"], "--class_mode must be either 'default' or 'multiple_masks'"
+    assert args.input_channels in ["rgb", "genes"], "--input_channels must be either 'rgb' or 'genes'"
+
     print("Weights: ", args.weights)
     print("Dataset: ", args.dataset)
     print("Logs: ", args.logs)
     
     # Configurations
     if args.command == "train":
-        config = CellConfig()
+        if args.input_channels == "rgb":
+            config = CellConfig()
+        elif args.input_channels == "genes":
+            class GeneConfig(CellConfig):
+                IMAGE_CHANNEL_COUNT = 4
+            config = GeneConfig()
     else:
         class InferenceConfig(CellConfig):
             # Set batch size to 1 since we'll be running inference on
@@ -455,7 +476,7 @@ if __name__ == '__main__':
     
     # Train or evaluate
     if args.command == "train":
-        train(model, args.class_mode)
+        train(model, args.class_mode, args.input_channels)
     elif args.command == "detect":
         # TODO
         print("Not yet implemented.")
