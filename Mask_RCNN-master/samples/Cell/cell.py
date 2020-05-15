@@ -75,8 +75,8 @@ class CellConfig(Config):
     # IMAGE_MIN_DIM is the size of the scaled shortest side
     # IMAGE_MAX_DIM is the maximum allowed size of the scaled longest side
     # May benefit from adjusting
-    IMAGE_MIN_DIM = 800
-    IMAGE_MAX_DIM = 1024
+    IMAGE_MIN_DIM = 2048
+    IMAGE_MAX_DIM = 2048
     
     # Number of color channels per image
     # Changing this requires other changes in the code. See the WIKI for more
@@ -91,12 +91,12 @@ class CellConfig(Config):
     
     # Maximum number of ground truth instances  and final detections
     # These must definitely be higher
-    MAX_GT_INSTANCES = 100
-    DETECTION_MAX_INSTANCES = 100
+    MAX_GT_INSTANCES = 1500
+    DETECTION_MAX_INSTANCES = 1500
 
     # Minimum probability value to accept a detected instance
     # ROIs below this threshold are skipped
-    DETECTION_MIN_CONFIDENCE = 0.5
+    DETECTION_MIN_CONFIDENCE = 0.7
     
 
 ############################################################
