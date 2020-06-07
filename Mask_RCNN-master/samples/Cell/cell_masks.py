@@ -63,7 +63,7 @@ class CellConfig(Config):
 
     # The number of images per GPU depends on the size of the VRAM and the size of the images
     # Adjust as ceil( VRAM / max(img_size) )
-    IMAGES_PER_GPU = 2
+    IMAGES_PER_GPU = 1
 
     # Number of training steps per epoch
     # This doesn't need to match the size of the training set. Tensorboard
@@ -81,7 +81,7 @@ class CellConfig(Config):
 
     # Number of classes (including background)
     # Find out how to use multiple labels
-    NUM_CLASSES = 1 + 3  # Background + others
+    NUM_CLASSES = 1 + 3  # Background + ( red + white + red and white )
 
     # How many anchors per image to use for RPN training
     RPN_TRAIN_ANCHORS_PER_IMAGE = 512
@@ -95,12 +95,17 @@ class CellConfig(Config):
     POST_NMS_ROIS_TRAINING = 2000
     POST_NMS_ROIS_INFERENCE = 1000
 
+    # If enabled, resizes instance masks to a smaller size to reduce
+    # memory load. Recommended when using high-resolution images.
+    USE_MINI_MASK = True
+    MINI_MASK_SHAPE = (56, 56)  # (height, width) of the mini-mask
+       
     # Input image resizing
     # IMAGE_MIN_DIM is the size of the scaled shortest side
     # IMAGE_MAX_DIM is the maximum allowed size of the scaled longest side
     # May benefit from adjusting
-    IMAGE_MIN_DIM = 2048
-    IMAGE_MAX_DIM = 2048
+    IMAGE_MIN_DIM = 1024
+    IMAGE_MAX_DIM = 1024
 
     # Number of color channels per image
     # Changing this requires other changes in the code. See the WIKI for more
