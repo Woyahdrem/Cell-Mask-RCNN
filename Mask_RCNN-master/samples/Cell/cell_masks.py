@@ -82,6 +82,9 @@ class CellConfig(Config):
     # Number of classes (including background)
     # Find out how to use multiple labels
     NUM_CLASSES = 1 + 3  # Background + ( red + white + red and white )
+    
+    # Length of square anchor side in pixels
+    RPN_ANCHOR_SCALES = (8, 16, 32, 64, 128)
 
     # How many anchors per image to use for RPN training
     RPN_TRAIN_ANCHORS_PER_IMAGE = 512
