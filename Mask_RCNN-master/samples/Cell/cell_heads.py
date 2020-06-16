@@ -10,7 +10,7 @@ Usage: import the module (see Jupyter notebooks for examples), or run from
        the command line as such:
 
     # Train a new model using the pre-trained RPN weights
-    python cell_heads.py train --dataset=../../DatasetGeneChannels --weights=/path/to/RPN/weights.h5
+    python cell_heads.py train --dataset=../../DatasetGeneChannels --weights="../../../models/cellSegmentation_RPN_only/mask_rcnn_cell_0010.h5"
 """
 
 import os
@@ -241,17 +241,17 @@ class CellDatasetDefault(utils.Dataset):
 #  Training
 ############################################################
 
-def train(model, color):
+def train(model):
     """Train the model."""
 
     # Training dataset
     dataset_train = CellDatasetDefault()
-    dataset_train.load_cell(args.dataset, "train", color)
+    dataset_train.load_cell(args.dataset, "train", args.color)
     dataset_train.prepare()
 
     # Validation dataset
     dataset_val = CellDatasetDefault()
-    dataset_val.load_cell(args.dataset, "val", color)
+    dataset_val.load_cell(args.dataset, "val", args.color)
     dataset_val.prepare()
 
     # Select the layers to train
@@ -260,15 +260,15 @@ def train(model, color):
     # Define the augmentation of for the dataset
     augmentation = iaa.Sequential([
         iaa.Fliplr(0.5),
-        iaa.Flipud(0.5),
-        iaa.Rotate((-45, 45))
+        iaa.Flipud(0.5)#,
+        #iaa.Rotate((-45, 45))
     ])
 
     # Finally, train the model
     print("Training network heads")
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
-                epochs=100,
+                epochs=10,
                 layers=layers,
                 augmentation=augmentation)
 
@@ -348,7 +348,7 @@ if __name__ == '__main__':
     elif args.command == "detect":
         assert args.image, "Provide --image or --video to apply color splash"
     assert args.input_channels in ["rgb", "genes"], "--input_channels must be either 'rgb' or 'genes'"
-    assert args.network in ["red", "white", "Heads"], "--color supported are white and red"
+    assert args.color in ["red", "white"], "--color supported are white and red"
 
     print("Weights: ", args.weights)
     print("Dataset: ", args.dataset)
@@ -400,7 +400,7 @@ if __name__ == '__main__':
 
     # Train or evaluate
     if args.command == "train":
-        train(model, args.class_mode, args.input_channels)
+        train(model)
     elif args.command == "detect":
         detect(model, args.class_mode, args.input_channels, image_path=args.image)
     else:
